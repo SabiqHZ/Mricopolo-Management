@@ -10,6 +10,15 @@ app.use(cors());
 app.use(morgan("dev"));
 app.use(express.json());
 
+const authRoutes = require('./modules/auth/auth.routes');
+const authenticate = require('./middlewares/auth.middleware');
+
+app.use('/auth', authRoutes);
+
+app.get('/auth/me', authenticate, (req, res) => {
+  res.json({ success: true, data: req.user, message: 'Token valid' });
+});
+
 app.get("/health", (req, res) => {
   res.json({
     success: true,
