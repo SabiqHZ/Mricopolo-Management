@@ -13,6 +13,11 @@ app.use(express.json());
 const authRoutes = require('./modules/auth/auth.routes');
 const authenticate = require('./middlewares/auth.middleware');
 
+
+app.use('/payments', require('./modules/payments/payments.routes'));
+app.use('/returns', require('./modules/returns/returns.routes'));
+app.use('/droppings', require('./modules/droppings/droppings.routes'));
+app.use('/prices', require('./modules/prices/prices.routes'));
 app.use('/stores', require('./modules/stores/stores.routes'));
 app.use('/products', require('./modules/products/products.routes'));
 app.use('/auth', authRoutes);
