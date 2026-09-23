@@ -1,30 +1,67 @@
-// This is a basic Flutter widget test.
-//
-// To perform an interaction with a widget in your test, use the WidgetTester
-// utility in the flutter_test package. For example, you can send tap and scroll
-// gestures. You can also use WidgetTester to find child widgets in the widget
-// tree, read text, and verify that the values of widget properties are correct.
-
-import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:dio/dio.dart';
+import 'package:flutter/material.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
-import 'package:mobile/main.dart';
+import 'package:mobile/core/token_storage.dart';
+import 'package:mobile/core/connectivity_checker.dart';
+import 'package:mobile/core/app_services.dart';
+import 'package:mobile/database/local_db.dart';
+import 'package:mobile/database/sync_queue_repository.dart';
+import 'package:mobile/database/sync_engine.dart';
+import 'package:mobile/features/auth/auth_repository.dart';
+import 'package:mobile/features/auth/auth_bloc.dart';
+import 'package:mobile/features/auth/login_screen.dart';
+import 'package:mobile/features/droppings/dropping_repository.dart';
+
+class _FakeTokenStorage implements TokenStorage {
+  @override
+  Future<void> saveToken(String token) async {}
+  @override
+  Future<String?> getToken() async => null;
+  @override
+  Future<void> clearToken() async {}
+}
+
+class _FakeConnectivity implements ConnectivityChecker {
+  @override
+  Future<bool> isOnline() async => true;
+}
 
 void main() {
-  testWidgets('Counter increments smoke test', (WidgetTester tester) async {
-    // Build our app and trigger a frame.
-    await tester.pumpWidget(const MyApp());
+  setUpAll(() {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+    LocalDb.setTestPath(inMemoryDatabasePath);
+  });
+  tearDown(() => LocalDb.resetForTest());
 
-    // Verify that our counter starts at 0.
-    expect(find.text('0'), findsOneWidget);
-    expect(find.text('1'), findsNothing);
+  testWidgets('Login screen renders username, password, and login button', (tester) async {
+    final dio = Dio();
+    final tokenStorage = _FakeTokenStorage();
+    final connectivity = _FakeConnectivity();
+    final syncQueue = SyncQueueRepository();
 
-    // Tap the '+' icon and trigger a frame.
-    await tester.tap(find.byIcon(Icons.add));
-    await tester.pump();
+    final services = AppServices(
+      tokenStorage: tokenStorage,
+      dio: dio,
+      connectivity: connectivity,
+      syncQueue: syncQueue,
+      syncEngine: SyncEngine(dio: dio, syncQueue: syncQueue),
+      droppingRepository: DroppingRepository(dio: dio, connectivity: connectivity, syncQueue: syncQueue),
+      authRepository: AuthRepository(dio: dio, tokenStorage: tokenStorage),
+    );
 
-    // Verify that our counter has incremented.
-    expect(find.text('0'), findsNothing);
-    expect(find.text('1'), findsOneWidget);
+    await tester.pumpWidget(MaterialApp(
+      home: BlocProvider(
+        create: (_) => AuthBloc(services.authRepository),
+        child: LoginScreen(services: services),
+      ),
+    ));
+
+    expect(find.text('Username or Email'), findsOneWidget);
+    expect(find.text('Password'), findsOneWidget);
+    expect(find.widgetWithText(ElevatedButton, 'Login'), findsOneWidget);
   });
 }
