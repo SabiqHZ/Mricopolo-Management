@@ -71,4 +71,47 @@ const create = async (data) => {
   }
 };
 
-module.exports = { create };
+const list = (filters) => {
+  const conditions = [];
+  const params = [];
+  let index = 1;
+
+  if (filters.store_id) {
+    conditions.push(`r.store_id = $${index++}`);
+    params.push(filters.store_id);
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  return pool.query(
+    `SELECT r.*, i.id AS invoice_id, i.total_amount AS invoice_total, i.status AS invoice_status
+     FROM returns r
+     JOIN invoices i ON i.return_id = r.id
+     ${where}
+     ORDER BY r.returned_at ASC`,
+    params
+  ).then((result) => result.rows);
+};
+
+const getWithItems = async (id) => {
+  const header = await pool.query(
+    `SELECT r.*, i.id AS invoice_id, i.total_amount AS invoice_total, i.status AS invoice_status
+     FROM returns r
+     JOIN invoices i ON i.return_id = r.id
+     WHERE r.id = $1`,
+    [id]
+  );
+  if (!header.rows.length) return null;
+
+  const items = await pool.query(
+    `SELECT ri.*, di.product_id, di.quantity AS dropped_quantity, p.name AS product_name,
+            (di.quantity - ri.quantity) AS sold_quantity
+     FROM return_items ri
+     JOIN dropping_items di ON di.id = ri.dropping_item_id
+     JOIN products p ON p.id = di.product_id
+     WHERE ri.return_id = $1`,
+    [id]
+  );
+  return { ...header.rows[0], items: items.rows };
+};
+
+module.exports = { create, list, getWithItems };

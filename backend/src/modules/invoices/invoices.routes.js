@@ -1,9 +1,10 @@
 const express = require('express');
 const authenticate = require('../../middlewares/auth.middleware');
-const c = require('./returns.controller');
+const controller = require('./invoices.controller');
+
 const router = express.Router();
 router.use(authenticate);
-router.post('/', c.create);
-router.get('/', c.list);
-router.get('/:id', c.get);
+router.get('/', controller.list);
+router.get('/:id', controller.get);
+
 module.exports = router;

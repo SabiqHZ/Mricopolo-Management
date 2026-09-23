@@ -1,5 +1,6 @@
 "use client";
-import { useEffect } from "react";
+
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
 
@@ -11,13 +12,23 @@ export default function DashboardLayout({
   const { token, user, loading, logout } = useAuth();
   const router = useRouter();
 
+  // State untuk memastikan render dilakukan di client-side (mencegah Hydration Error)
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
   useEffect(() => {
     if (!loading && !token) {
       router.replace("/login");
     }
   }, [loading, token, router]);
 
-  if (loading || !token) return null;
+  // Cegah render jika masih di server/SSR, masih loading auth, atau tidak ada token
+  if (!isMounted || loading || !token) {
+    return null;
+  }
 
   return (
     <div className="flex min-h-screen">
@@ -31,6 +42,18 @@ export default function DashboardLayout({
         </a>
         <a href="/dashboard/products" className="block py-1">
           Products
+        </a>
+        <a href="/dashboard/prices" className="block py-1">
+          Store Prices
+        </a>
+        <a href="/dashboard/droppings" className="block py-1">
+          Droppings
+        </a>
+        <a href="/dashboard/returns" className="block py-1">
+          Returns
+        </a>
+        <a href="/dashboard/invoices" className="block py-1">
+          Invoices
         </a>
         <button
           onClick={() => {

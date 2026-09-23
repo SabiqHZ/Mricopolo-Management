@@ -21,3 +21,11 @@ exports.create = async (req, res) => {
     throw err;
   }
 };
+
+exports.list = async (req, res) => ok(res, await svc.list(req.query));
+
+exports.get = async (req, res) => {
+  const result = await svc.getWithItems(req.params.id);
+  if (!result) return fail(res, 404, 'NOT_FOUND', 'Return not found');
+  ok(res, result);
+};

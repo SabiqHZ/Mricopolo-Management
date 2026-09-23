@@ -16,11 +16,14 @@ const authenticate = require('./middlewares/auth.middleware');
 
 app.use('/payments', require('./modules/payments/payments.routes'));
 app.use('/returns', require('./modules/returns/returns.routes'));
+app.use('/invoices', require('./modules/invoices/invoices.routes'));
+app.use('/direct-orders', require('./modules/direct-orders/direct-orders.routes'));
 app.use('/droppings', require('./modules/droppings/droppings.routes'));
 app.use('/prices', require('./modules/prices/prices.routes'));
 app.use('/stores', require('./modules/stores/stores.routes'));
 app.use('/products', require('./modules/products/products.routes'));
 app.use('/auth', authRoutes);
+app.use('/dashboard', require('./modules/dashboard/dashboard.routes'));
 
 app.get('/auth/me', authenticate, (req, res) => {
   res.json({ success: true, data: req.user, message: 'Token valid' });
