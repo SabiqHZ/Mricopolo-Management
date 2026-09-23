@@ -13,6 +13,8 @@ app.use(express.json());
 const authRoutes = require('./modules/auth/auth.routes');
 const authenticate = require('./middlewares/auth.middleware');
 
+app.use('/stores', require('./modules/stores/stores.routes'));
+app.use('/products', require('./modules/products/products.routes'));
 app.use('/auth', authRoutes);
 
 app.get('/auth/me', authenticate, (req, res) => {
@@ -26,6 +28,8 @@ app.get("/health", (req, res) => {
     message: "Server is running",
   });
 });
+
+
 
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => console.log(`Backend listening on port ${PORT}`));

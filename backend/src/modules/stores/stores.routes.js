@@ -1,0 +1,11 @@
+const express = require('express');
+const authenticate = require('../../middlewares/auth.middleware');
+const c = require('./stores.controller');
+const router = express.Router();
+router.use(authenticate);
+router.post('/', c.create);
+router.get('/', c.list);
+router.get('/:id', c.get);
+router.put('/:id', c.update);
+router.delete('/:id', c.remove);
+module.exports = router;
