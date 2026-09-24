@@ -14,6 +14,7 @@ import 'package:mobile/features/auth/auth_repository.dart';
 import 'package:mobile/features/auth/auth_bloc.dart';
 import 'package:mobile/features/auth/login_screen.dart';
 import 'package:mobile/features/droppings/dropping_repository.dart';
+import 'package:mobile/features/direct_orders/direct_order_repository.dart';
 
 class _FakeTokenStorage implements TokenStorage {
   @override
@@ -37,7 +38,9 @@ void main() {
   });
   tearDown(() => LocalDb.resetForTest());
 
-  testWidgets('Login screen renders username, password, and login button', (tester) async {
+  testWidgets('Login screen renders username, password, and login button', (
+    tester,
+  ) async {
     final dio = Dio();
     final tokenStorage = _FakeTokenStorage();
     final connectivity = _FakeConnectivity();
@@ -49,16 +52,27 @@ void main() {
       connectivity: connectivity,
       syncQueue: syncQueue,
       syncEngine: SyncEngine(dio: dio, syncQueue: syncQueue),
-      droppingRepository: DroppingRepository(dio: dio, connectivity: connectivity, syncQueue: syncQueue),
+      droppingRepository: DroppingRepository(
+        dio: dio,
+        connectivity: connectivity,
+        syncQueue: syncQueue,
+      ),
       authRepository: AuthRepository(dio: dio, tokenStorage: tokenStorage),
+      directOrderRepository: DirectOrderRepository(
+        dio: dio,
+        connectivity: connectivity,
+        syncQueue: syncQueue,
+      ),
     );
 
-    await tester.pumpWidget(MaterialApp(
-      home: BlocProvider(
-        create: (_) => AuthBloc(services.authRepository),
-        child: LoginScreen(services: services),
+    await tester.pumpWidget(
+      MaterialApp(
+        home: BlocProvider(
+          create: (_) => AuthBloc(services.authRepository),
+          child: LoginScreen(services: services),
+        ),
       ),
-    ));
+    );
 
     expect(find.text('Username or Email'), findsOneWidget);
     expect(find.text('Password'), findsOneWidget);

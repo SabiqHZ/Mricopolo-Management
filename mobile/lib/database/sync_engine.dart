@@ -1,13 +1,20 @@
 import 'dart:convert';
+
 import 'package:dio/dio.dart';
+
 import 'sync_queue_repository.dart';
+
 import 'package:flutter/foundation.dart';
 
 class SyncResult {
   final int succeeded;
   final int failed;
   final int total;
-  SyncResult({required this.succeeded, required this.failed, required this.total});
+  SyncResult({
+    required this.succeeded,
+    required this.failed,
+    required this.total,
+  });
 }
 
 class SyncEngine {
@@ -26,21 +33,33 @@ class SyncEngine {
 
   Future<SyncResult> syncPending() async {
     final pending = await syncQueue.getByStatus('pending');
-    int succeeded = 0, failed = 0;
+    final failed = await syncQueue.getByStatus('failed');
 
-    for (final row in pending) {
+    final queue = [...pending, ...failed]
+      ..sort(
+        (a, b) =>
+            (a['created_at'] as String).compareTo(b['created_at'] as String),
+      );
+
+    int succeeded = 0;
+    int failedCount = 0;
+
+    for (final row in queue) {
       final id = row['id'] as int;
       final entityType = row['entity_type'] as String;
-      final payload = jsonDecode(row['payload'] as String) as Map<String, dynamic>;
+      final payload =
+          jsonDecode(row['payload'] as String) as Map<String, dynamic>;
+
       final endpoint = _endpoints[entityType];
 
       if (endpoint == null) {
         await syncQueue.markFailed(id, 'Unknown entity_type: $entityType');
-        failed++;
+        failedCount++;
         continue;
       }
 
       await syncQueue.markSyncing(id);
+
       try {
         await dio.post(endpoint, data: payload);
         await syncQueue.markSynced(id);
@@ -48,10 +67,14 @@ class SyncEngine {
       } catch (e) {
         debugPrint('SYNC FAILED for id=$id: $e');
         await syncQueue.markFailed(id, e.toString());
-        failed++;
+        failedCount++;
       }
     }
 
-    return SyncResult(succeeded: succeeded, failed: failed, total: pending.length);
+    return SyncResult(
+      succeeded: succeeded,
+      failed: failedCount,
+      total: queue.length,
+    );
   }
 }

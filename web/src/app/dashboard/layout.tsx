@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -54,6 +54,12 @@ export default function DashboardLayout({
         </a>
         <a href="/dashboard/invoices" className="block py-1">
           Invoices
+        </a>
+        <a href="/dashboard/direct-orders" className="block py-1">
+          Direct Orders
+        </a>
+        <a href="/dashboard/reports" className="block py-1">
+          Reports
         </a>
         <button
           onClick={() => {
