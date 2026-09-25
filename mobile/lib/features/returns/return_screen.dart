@@ -1,3 +1,4 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/app_services.dart';
@@ -12,208 +13,251 @@ class ReturnScreen extends StatefulWidget {
 }
 
 class _ReturnScreenState extends State<ReturnScreen> {
-  final _storeIdController = TextEditingController();
-
-  bool _loading = false;
-  bool _submitting = false;
+  bool _loadingStores = true;
+  bool _loadingDroppings = false;
+  bool _saving = false;
 
   String? _errorMessage;
-  String? _resultMessage;
 
-  List<Map<String, dynamic>> _items = [];
+  List<Map<String, dynamic>> _stores = [];
+  List<Map<String, dynamic>> _returnableItems = [];
 
-  int? _selectedDroppingId;
+  int? _selectedStoreId;
 
-  final Map<int, TextEditingController> _returnControllers = {};
+  /// Key = dropping item ID
+  /// Value = quantity to return
+  final Map<int, int> _returnQuantities = {};
 
   @override
-  void dispose() {
-    _storeIdController.dispose();
-
-    for (final controller in _returnControllers.values) {
-      controller.dispose();
-    }
-
-    super.dispose();
+  void initState() {
+    super.initState();
+    _loadStores();
   }
 
-  Future<void> _loadReturnableDroppings() async {
-    FocusScope.of(context).unfocus();
+  Future<void> _loadStores() async {
+    setState(() {
+      _loadingStores = true;
+      _errorMessage = null;
+    });
 
-    final storeId = int.tryParse(_storeIdController.text.trim());
+    try {
+      final response = await widget.services.dio.get('/stores');
 
-    if (storeId == null || storeId <= 0) {
+      final responseData = response.data;
+      final rawData = responseData is Map
+          ? (responseData['data'] ?? responseData)
+          : responseData;
+
+      if (rawData is! List) {
+        throw Exception('Format data toko tidak valid.');
+      }
+
+      final stores = rawData
+          .whereType<Map>()
+          .map((store) => Map<String, dynamic>.from(store))
+          .where((store) => store['id'] != null && store['name'] != null)
+          .toList();
+
+      if (!mounted) return;
+
       setState(() {
-        _errorMessage = 'Store ID tidak valid.';
-        _resultMessage = null;
+        _stores = stores;
+        _loadingStores = false;
       });
+    } on DioException catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _loadingStores = false;
+        _errorMessage = _dioErrorMessage(
+          e,
+          fallback: 'Gagal mengambil daftar warung.',
+        );
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _loadingStores = false;
+        _errorMessage = 'Gagal mengambil daftar warung: $e';
+      });
+    }
+  }
+
+  Future<void> _selectStore(int? storeId) async {
+    setState(() {
+      _selectedStoreId = storeId;
+      _returnableItems = [];
+      _returnQuantities.clear();
+      _errorMessage = null;
+    });
+
+    if (storeId == null) {
       return;
     }
 
+    await _loadReturnableDroppings(storeId);
+  }
+
+  Future<void> _loadReturnableDroppings(int storeId) async {
     setState(() {
-      _loading = true;
+      _loadingDroppings = true;
       _errorMessage = null;
-      _resultMessage = null;
-      _items = [];
-      _selectedDroppingId = null;
     });
 
     try {
       final items = await widget.services.returnRepository
           .getReturnableDroppingItems(storeId: storeId);
 
-      for (final controller in _returnControllers.values) {
-        controller.dispose();
-      }
-
-      _returnControllers.clear();
+      if (!mounted) return;
 
       setState(() {
-        _items = items;
-        _loading = false;
+        _returnableItems = items;
+        _loadingDroppings = false;
       });
-    } catch (error) {
+    } catch (e) {
+      if (!mounted) return;
+
       setState(() {
-        _loading = false;
-        _errorMessage = 'Gagal mengambil dropping yang dapat diretur: $error';
+        _loadingDroppings = false;
+        _errorMessage = 'Gagal mengambil dropping: $e';
       });
     }
   }
 
-  void _selectDropping(int droppingId) {
-    for (final controller in _returnControllers.values) {
-      controller.dispose();
+  void _increaseQuantity(Map<String, dynamic> item) {
+    final itemId = _toInt(item['dropping_item_id']);
+
+    if (itemId == null) {
+      return;
     }
 
-    _returnControllers.clear();
+    final maxQuantity = _toInt(item['quantity']) ?? 0;
+    final current = _returnQuantities[itemId] ?? 0;
 
-    final selectedItems = _items.where(
-      (item) => _toInt(item['dropping_id']) == droppingId,
-    );
-
-    for (final item in selectedItems) {
-      final droppingItemId = _toInt(item['id']);
-
-      if (droppingItemId != null) {
-        _returnControllers[droppingItemId] = TextEditingController(text: '0');
-      }
+    if (current >= maxQuantity) {
+      return;
     }
 
     setState(() {
-      _selectedDroppingId = droppingId;
-      _errorMessage = null;
-      _resultMessage = null;
+      _returnQuantities[itemId] = current + 1;
     });
   }
 
-  Future<void> _submitReturn() async {
-    final storeId = int.tryParse(_storeIdController.text.trim());
+  void _decreaseQuantity(Map<String, dynamic> item) {
+    final itemId = _toInt(item['dropping_item_id']);
 
-    final droppingId = _selectedDroppingId;
-
-    if (storeId == null || storeId <= 0) {
-      setState(() {
-        _errorMessage = 'Store ID tidak valid.';
-      });
+    if (itemId == null) {
       return;
     }
 
-    if (droppingId == null) {
-      setState(() {
-        _errorMessage = 'Pilih dropping terlebih dahulu.';
-      });
-      return;
-    }
+    final current = _returnQuantities[itemId] ?? 0;
 
-    final selectedItems = _items.where(
-      (item) => _toInt(item['dropping_id']) == droppingId,
-    );
-
-    final returnItems = <Map<String, dynamic>>[];
-
-    for (final item in selectedItems) {
-      final droppingItemId = _toInt(item['id']);
-
-      if (droppingItemId == null) {
-        continue;
-      }
-
-      final droppedQuantity = _toInt(item['quantity']) ?? 0;
-
-      final controller = _returnControllers[droppingItemId];
-
-      final returnQuantity = int.tryParse(controller?.text.trim() ?? '0') ?? 0;
-
-      if (returnQuantity < 0) {
-        setState(() {
-          _errorMessage = 'Jumlah retur tidak boleh negatif.';
-        });
-        return;
-      }
-
-      if (returnQuantity > droppedQuantity) {
-        setState(() {
-          _errorMessage =
-              'Jumlah retur ${item['product_name'] ?? 'produk'} '
-              'melebihi jumlah dropping ($droppedQuantity).';
-        });
-        return;
-      }
-
-      if (returnQuantity > 0) {
-        returnItems.add({
-          'dropping_item_id': droppingItemId,
-          'quantity': returnQuantity,
-        });
-      }
-    }
-
-    if (returnItems.isEmpty) {
-      setState(() {
-        _errorMessage = 'Masukkan minimal satu jumlah retur lebih dari 0.';
-      });
+    if (current <= 0) {
       return;
     }
 
     setState(() {
-      _submitting = true;
+      final next = current - 1;
+
+      if (next == 0) {
+        _returnQuantities.remove(itemId);
+      } else {
+        _returnQuantities[itemId] = next;
+      }
+    });
+  }
+
+  Future<void> _saveReturn() async {
+    final storeId = _selectedStoreId;
+
+    if (storeId == null) {
+      _showMessage('Pilih warung terlebih dahulu.');
+      return;
+    }
+
+    final selectedItems = _returnQuantities.entries
+        .where((entry) => entry.value > 0)
+        .map(
+          (entry) => {'dropping_item_id': entry.key, 'quantity': entry.value},
+        )
+        .toList();
+
+    if (selectedItems.isEmpty) {
+      _showMessage('Masukkan minimal satu jumlah retur.');
+      return;
+    }
+
+    setState(() {
+      _saving = true;
       _errorMessage = null;
-      _resultMessage = null;
     });
 
     try {
       final result = await widget.services.returnRepository.recordReturn({
         'store_id': storeId,
-        'items': returnItems,
+        'items': selectedItems,
       });
 
       if (!mounted) return;
 
+      final synced = result['synced'] == true;
+
       setState(() {
-        _submitting = false;
-        _resultMessage = result['synced'] == true
-            ? 'Return berhasil disimpan dan langsung tersinkron.'
-            : 'Return disimpan offline dan akan disinkronkan nanti.';
+        _saving = false;
       });
-    } catch (error) {
+
+      _returnQuantities.clear();
+
+      await _loadReturnableDroppings(storeId);
+
+      if (!mounted) return;
+
+      _showMessage(
+        synced
+            ? 'Retur berhasil disimpan.'
+            : 'Retur disimpan dan masuk antrean sinkronisasi.',
+      );
+    } catch (e) {
       if (!mounted) return;
 
       setState(() {
-        _submitting = false;
-        _errorMessage = 'Gagal menyimpan return: $error';
+        _saving = false;
+        _errorMessage = 'Gagal menyimpan retur: $e';
       });
     }
   }
 
-  int? _toInt(dynamic value) {
-    if (value == null) {
-      return null;
+  Map<int, List<Map<String, dynamic>>> _groupByDropping() {
+    final grouped = <int, List<Map<String, dynamic>>>{};
+
+    for (final item in _returnableItems) {
+      final droppingId = _toInt(item['dropping_id']);
+
+      if (droppingId == null) {
+        continue;
+      }
+
+      grouped.putIfAbsent(droppingId, () => []).add(item);
     }
 
-    return int.tryParse(value.toString());
+    return grouped;
   }
 
-  String _formatDroppedAt(dynamic value) {
+  int _totalReturnQuantity() {
+    return _returnQuantities.values.fold(0, (sum, quantity) => sum + quantity);
+  }
+
+  String _storeName(int storeId) {
+    final store = _stores.cast<Map<String, dynamic>?>().firstWhere(
+      (item) => _toInt(item?['id']) == storeId,
+      orElse: () => null,
+    );
+
+    return store?['name']?.toString() ?? 'Warung';
+  }
+
+  String _formatDate(dynamic value) {
     if (value == null) {
       return '-';
     }
@@ -224,217 +268,334 @@ class _ReturnScreenState extends State<ReturnScreen> {
       return value.toString();
     }
 
-    return '${parsed.day.toString().padLeft(2, '0')}/'
-        '${parsed.month.toString().padLeft(2, '0')}/'
-        '${parsed.year} '
-        '${parsed.hour.toString().padLeft(2, '0')}:'
-        '${parsed.minute.toString().padLeft(2, '0')}';
+    final local = parsed.toLocal();
+
+    return '${local.day.toString().padLeft(2, '0')}/'
+        '${local.month.toString().padLeft(2, '0')}/'
+        '${local.year} '
+        '${local.hour.toString().padLeft(2, '0')}:'
+        '${local.minute.toString().padLeft(2, '0')}';
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final droppingIds = <int>{};
+  int? _toInt(dynamic value) {
+    if (value == null) {
+      return null;
+    }
 
-    for (final item in _items) {
-      final droppingId = _toInt(item['dropping_id']);
+    if (value is int) {
+      return value;
+    }
 
-      if (droppingId != null) {
-        droppingIds.add(droppingId);
+    return int.tryParse(value.toString());
+  }
+
+  String _dioErrorMessage(DioException error, {required String fallback}) {
+    final data = error.response?.data;
+
+    if (data is Map<String, dynamic>) {
+      final apiError = data['error'];
+
+      if (apiError is Map<String, dynamic> && apiError['message'] != null) {
+        return apiError['message'].toString();
+      }
+
+      if (data['message'] != null) {
+        return data['message'].toString();
       }
     }
 
-    final selectedItems = _selectedDroppingId == null
-        ? <Map<String, dynamic>>[]
-        : _items
-              .where(
-                (item) => _toInt(item['dropping_id']) == _selectedDroppingId,
-              )
-              .toList();
-
-    final selectedDropping = selectedItems.isEmpty ? null : selectedItems.first;
-
-    return Scaffold(
-      appBar: AppBar(title: const Text('New Return')),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextField(
-              controller: _storeIdController,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Store ID',
-                hintText: 'Contoh: 1',
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _loading ? null : _loadReturnableDroppings,
-                child: Text(
-                  _loading ? 'Loading...' : 'Load Returnable Droppings',
-                ),
-              ),
-            ),
-            if (_errorMessage != null) ...[
-              const SizedBox(height: 12),
-              Text(_errorMessage!, style: const TextStyle(color: Colors.red)),
-            ],
-            if (_resultMessage != null) ...[
-              const SizedBox(height: 12),
-              Text(
-                _resultMessage!,
-                style: const TextStyle(color: Colors.green),
-              ),
-            ],
-            const SizedBox(height: 20),
-            if (_items.isNotEmpty) ...[
-              const Text(
-                'Dropping yang belum diretur',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              for (final droppingId in droppingIds)
-                _DroppingCard(
-                  droppingId: droppingId,
-                  items: _items
-                      .where(
-                        (item) => _toInt(item['dropping_id']) == droppingId,
-                      )
-                      .toList(),
-                  selected: _selectedDroppingId == droppingId,
-                  formatDate: _formatDroppedAt,
-                  onTap: () => _selectDropping(droppingId),
-                ),
-            ],
-            if (_selectedDroppingId != null && selectedItems.isNotEmpty) ...[
-              const SizedBox(height: 20),
-              Text(
-                'Return - Dropping #$_selectedDroppingId',
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              if (selectedDropping?['dropped_at'] != null) ...[
-                const SizedBox(height: 4),
-                Text(
-                  'Tanggal dropping: '
-                  '${_formatDroppedAt(selectedDropping?['dropped_at'])}',
-                  style: const TextStyle(color: Colors.grey),
-                ),
-              ],
-              const SizedBox(height: 12),
-              ...selectedItems.map((item) {
-                final droppingItemId = _toInt(item['id']);
-
-                final droppedQuantity = _toInt(item['quantity']) ?? 0;
-
-                final controller = _returnControllers[droppingItemId];
-
-                return Card(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                item['product_name'] ??
-                                    'Product ${item['product_id']}',
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text('Dropped: $droppedQuantity'),
-                            ],
-                          ),
-                        ),
-                        SizedBox(
-                          width: 90,
-                          child: TextField(
-                            controller: controller,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: 'Return',
-                              border: OutlineInputBorder(),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              }),
-              const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                child: _submitting
-                    ? const Center(child: CircularProgressIndicator())
-                    : ElevatedButton(
-                        onPressed: _submitReturn,
-                        child: const Text('Save Return'),
-                      ),
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
+    return fallback;
   }
-}
 
-class _DroppingCard extends StatelessWidget {
-  final int droppingId;
-  final List<Map<String, dynamic>> items;
-  final bool selected;
-  final String Function(dynamic) formatDate;
-  final VoidCallback onTap;
-
-  const _DroppingCard({
-    required this.droppingId,
-    required this.items,
-    required this.selected,
-    required this.formatDate,
-    required this.onTap,
-  });
+  void _showMessage(String message) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
 
   @override
   Widget build(BuildContext context) {
-    final droppedAt = items.isNotEmpty ? items.first['dropped_at'] : null;
+    final grouped = _groupByDropping();
+    final totalReturn = _totalReturnQuantity();
 
-    return Card(
-      color: selected ? Theme.of(context).colorScheme.primaryContainer : null,
-      child: InkWell(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Dropping #$droppingId',
-                style: const TextStyle(fontWeight: FontWeight.bold),
+    return Scaffold(
+      appBar: AppBar(title: const Text('Catat Retur')),
+      body: _loadingStores
+          ? const Center(child: CircularProgressIndicator())
+          : RefreshIndicator(
+              onRefresh: () async {
+                if (_selectedStoreId == null) {
+                  await _loadStores();
+                } else {
+                  await _loadReturnableDroppings(_selectedStoreId!);
+                }
+              },
+              child: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  const Text(
+                    'Pilih warung',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<int>(
+                    initialValue: _selectedStoreId,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      hintText: 'Pilih warung tujuan retur',
+                      prefixIcon: Icon(Icons.store),
+                    ),
+                    items: _stores.map((store) {
+                      final id = _toInt(store['id']);
+
+                      return DropdownMenuItem<int>(
+                        value: id,
+                        child: Text(store['name']?.toString() ?? 'Tanpa nama'),
+                      );
+                    }).toList(),
+                    onChanged: _saving ? null : _selectStore,
+                  ),
+                  const SizedBox(height: 20),
+                  if (_selectedStoreId != null)
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Row(
+                          children: [
+                            const CircleAvatar(child: Icon(Icons.storefront)),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  const Text(
+                                    'Warung dipilih',
+                                    style: TextStyle(fontSize: 12),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    _storeName(_selectedStoreId!),
+                                    style: const TextStyle(
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  if (_errorMessage != null) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.errorContainer,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.error_outline),
+                          const SizedBox(width: 8),
+                          Expanded(child: Text(_errorMessage!)),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 20),
+                  if (_selectedStoreId == null)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 40),
+                      child: Column(
+                        children: [
+                          Icon(Icons.assignment_return_outlined, size: 64),
+                          SizedBox(height: 12),
+                          Text(
+                            'Pilih warung untuk melihat barang yang '
+                            'masih dapat diretur.',
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    )
+                  else if (_loadingDroppings)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 40),
+                      child: Center(child: CircularProgressIndicator()),
+                    )
+                  else if (grouped.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 40),
+                      child: Column(
+                        children: [
+                          Icon(Icons.inventory_2_outlined, size: 64),
+                          SizedBox(height: 12),
+                          Text(
+                            'Tidak ada barang yang dapat diretur '
+                            'untuk warung ini.',
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    )
+                  else ...[
+                    const Text(
+                      'Dropping yang tersedia',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      '${grouped.length} dropping memiliki '
+                      'barang yang dapat diretur.',
+                    ),
+                    const SizedBox(height: 12),
+                    ...grouped.entries.map(
+                      (entry) => _buildDroppingCard(
+                        droppingId: entry.key,
+                        items: entry.value,
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 100),
+                ],
               ),
-              const SizedBox(height: 4),
-              Text('Tanggal: ${formatDate(droppedAt)}'),
-              const SizedBox(height: 8),
-              ...items.map(
-                (item) => Text(
-                  '• ${item['product_name'] ?? 'Product ${item['product_id']}'}'
-                  ' — ${item['quantity']} pcs',
+            ),
+      bottomNavigationBar:
+          _selectedStoreId != null && !_loadingDroppings && grouped.isNotEmpty
+          ? SafeArea(
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).scaffoldBackgroundColor,
+                  boxShadow: const [
+                    BoxShadow(blurRadius: 8, color: Colors.black12),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Total retur',
+                            style: TextStyle(fontSize: 12),
+                          ),
+                          Text(
+                            '$totalReturn item',
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    ElevatedButton.icon(
+                      onPressed: _saving || totalReturn == 0
+                          ? null
+                          : _saveReturn,
+                      icon: _saving
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.save),
+                      label: Text(_saving ? 'Menyimpan...' : 'Simpan Retur'),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
+            )
+          : null,
+    );
+  }
+
+  Widget _buildDroppingCard({
+    required int droppingId,
+    required List<Map<String, dynamic>> items,
+  }) {
+    final droppingDate = items.isNotEmpty ? items.first['dropped_at'] : null;
+
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: ExpansionTile(
+        initiallyExpanded: false,
+        leading: const CircleAvatar(child: Icon(Icons.inventory)),
+        title: Text(
+          'Dropping #$droppingId',
+          style: const TextStyle(fontWeight: FontWeight.bold),
         ),
+        subtitle: Text(
+          'Tanggal: ${_formatDate(droppingDate)}\n'
+          '${items.length} produk dapat diretur',
+        ),
+        children: [const Divider(height: 1), ...items.map(_buildReturnItem)],
+      ),
+    );
+  }
+
+  Widget _buildReturnItem(Map<String, dynamic> item) {
+    final itemId = _toInt(item['dropping_item_id']);
+
+    if (itemId == null) {
+      return const SizedBox.shrink();
+    }
+
+    final droppedQuantity = _toInt(item['quantity']) ?? 0;
+    final selectedQuantity = _returnQuantities[itemId] ?? 0;
+    final productName = item['product_name']?.toString() ?? 'Produk';
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  productName,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Tersedia untuk retur: $droppedQuantity',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            onPressed: selectedQuantity > 0 && !_saving
+                ? () => _decreaseQuantity(item)
+                : null,
+            icon: const Icon(Icons.remove_circle_outline),
+          ),
+          SizedBox(
+            width: 36,
+            child: Text(
+              '$selectedQuantity',
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+          ),
+          IconButton(
+            onPressed: selectedQuantity < droppedQuantity && !_saving
+                ? () => _increaseQuantity(item)
+                : null,
+            icon: const Icon(Icons.add_circle_outline),
+          ),
+        ],
       ),
     );
   }

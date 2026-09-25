@@ -22,37 +22,13 @@ class ReturnRepository {
       queryParameters: {'store_id': storeId},
     );
 
-    final body = response.data as Map<String, dynamic>;
-
-    if (body['success'] != true) {
-      throw Exception(body['message'] ?? 'Failed to load droppings');
-    }
-
-    final data = body['data'];
-
-    if (data is! List) {
-      return [];
-    }
-
-    return data.map((item) => Map<String, dynamic>.from(item as Map)).toList();
+    return _extractList(response.data);
   }
 
   Future<Map<String, dynamic>?> getDroppingDetail(int droppingId) async {
     final response = await dio.get('/droppings/$droppingId');
 
-    final body = response.data as Map<String, dynamic>;
-
-    if (body['success'] != true) {
-      return null;
-    }
-
-    final data = body['data'];
-
-    if (data is! Map) {
-      return null;
-    }
-
-    return Map<String, dynamic>.from(data);
+    return _extractMap(response.data);
   }
 
   Future<List<Map<String, dynamic>>> getReturns({required int storeId}) async {
@@ -61,76 +37,49 @@ class ReturnRepository {
       queryParameters: {'store_id': storeId},
     );
 
-    final body = response.data as Map<String, dynamic>;
-
-    if (body['success'] != true) {
-      throw Exception(body['message'] ?? 'Failed to load returns');
-    }
-
-    final data = body['data'];
-
-    if (data is! List) {
-      return [];
-    }
-
-    return data.map((item) => Map<String, dynamic>.from(item as Map)).toList();
+    return _extractList(response.data);
   }
 
   Future<Map<String, dynamic>?> getReturnDetail(int returnId) async {
     final response = await dio.get('/returns/$returnId');
 
-    final body = response.data as Map<String, dynamic>;
-
-    if (body['success'] != true) {
-      return null;
-    }
-
-    final data = body['data'];
-
-    if (data is! Map) {
-      return null;
-    }
-
-    return Map<String, dynamic>.from(data);
+    return _extractMap(response.data);
   }
 
   Future<List<Map<String, dynamic>>> getReturnableDroppingItems({
     required int storeId,
   }) async {
     final droppings = await getDroppings(storeId: storeId);
-
     final returns = await getReturns(storeId: storeId);
 
     final returnedDroppingItemIds = <int>{};
 
     for (final returnHeader in returns) {
-      final returnId = returnHeader['id'];
+      final returnId = _toInt(returnHeader['id']);
 
       if (returnId == null) {
         continue;
       }
 
-      final detail = await getReturnDetail(int.parse(returnId.toString()));
+      final detail = await getReturnDetail(returnId);
 
       if (detail == null) {
         continue;
       }
 
-      final items = detail['items'];
+      final rawItems = _extractItems(detail);
 
-      if (items is! List) {
-        continue;
-      }
+      for (final rawItem in rawItems) {
+        final item = _toMap(rawItem);
 
-      for (final item in items) {
-        if (item is! Map) {
+        if (item == null) {
           continue;
         }
 
-        final droppingItemId = item['dropping_item_id'];
+        final droppingItemId = _extractDroppingItemId(item);
 
         if (droppingItemId != null) {
-          returnedDroppingItemIds.add(int.parse(droppingItemId.toString()));
+          returnedDroppingItemIds.add(droppingItemId);
         }
       }
     }
@@ -138,51 +87,191 @@ class ReturnRepository {
     final result = <Map<String, dynamic>>[];
 
     for (final dropping in droppings) {
-      final droppingId = dropping['id'];
+      final droppingId = _toInt(dropping['id']);
 
       if (droppingId == null) {
         continue;
       }
 
-      final detail = await getDroppingDetail(int.parse(droppingId.toString()));
+      final detail = await getDroppingDetail(droppingId);
 
       if (detail == null) {
         continue;
       }
 
-      final items = detail['items'];
+      final rawItems = _extractItems(detail);
 
-      if (items is! List) {
-        continue;
-      }
+      for (final rawItem in rawItems) {
+        final item = _toMap(rawItem);
 
-      for (final item in items) {
-        if (item is! Map) {
+        if (item == null) {
           continue;
         }
 
-        final droppingItemId = item['id'];
+        final droppingItemId = _extractDroppingItemId(item);
 
         if (droppingItemId == null) {
           continue;
         }
 
-        final parsedDroppingItemId = int.parse(droppingItemId.toString());
-
-        if (returnedDroppingItemIds.contains(parsedDroppingItemId)) {
+        if (returnedDroppingItemIds.contains(droppingItemId)) {
           continue;
         }
 
+        final productName = _extractProductName(item);
+        final quantity = _extractQuantity(item);
+
         result.add({
-          ...Map<String, dynamic>.from(item),
-          'dropping_id': detail['id'],
-          'dropped_at': detail['dropped_at'],
-          'store_id': detail['store_id'],
+          ...item,
+          'dropping_item_id': droppingItemId,
+          'dropping_id': droppingId,
+          'product_name': productName,
+          'quantity': quantity,
+          'dropped_at':
+              item['dropped_at'] ??
+              detail['dropped_at'] ??
+              dropping['dropped_at'],
+          'store_id':
+              item['store_id'] ??
+              detail['store_id'] ??
+              dropping['store_id'] ??
+              storeId,
         });
       }
     }
 
     return result;
+  }
+
+  List<dynamic> _extractItems(dynamic data) {
+    if (data is List) {
+      return data;
+    }
+
+    if (data is! Map) {
+      return const [];
+    }
+
+    final map = Map<String, dynamic>.from(data);
+
+    final directCandidates = [
+      map['items'],
+      map['dropping_items'],
+      map['return_items'],
+    ];
+
+    for (final candidate in directCandidates) {
+      if (candidate is List) {
+        return candidate;
+      }
+    }
+
+    final nestedData = map['data'];
+
+    if (nestedData is Map) {
+      final nestedMap = Map<String, dynamic>.from(nestedData);
+
+      final nestedCandidates = [
+        nestedMap['items'],
+        nestedMap['dropping_items'],
+        nestedMap['return_items'],
+      ];
+
+      for (final candidate in nestedCandidates) {
+        if (candidate is List) {
+          return candidate;
+        }
+      }
+    }
+
+    return const [];
+  }
+
+  Map<String, dynamic>? _toMap(dynamic value) {
+    if (value is! Map) {
+      return null;
+    }
+
+    return Map<String, dynamic>.from(value);
+  }
+
+  int? _extractDroppingItemId(Map<String, dynamic> item) {
+    final directCandidates = [
+      item['dropping_item_id'],
+      item['droppingItemId'],
+      item['id'],
+    ];
+
+    for (final candidate in directCandidates) {
+      final id = _toInt(candidate);
+
+      if (id != null) {
+        return id;
+      }
+    }
+
+    final nestedDroppingItem = item['dropping_item'];
+
+    if (nestedDroppingItem is Map) {
+      final nestedMap = Map<String, dynamic>.from(nestedDroppingItem);
+
+      final id = _toInt(nestedMap['id'] ?? nestedMap['dropping_item_id']);
+
+      if (id != null) {
+        return id;
+      }
+    }
+
+    return null;
+  }
+
+  String _extractProductName(Map<String, dynamic> item) {
+    final directCandidates = [
+      item['product_name'],
+      item['productName'],
+      item['name'],
+    ];
+
+    for (final candidate in directCandidates) {
+      if (candidate != null && candidate.toString().trim().isNotEmpty) {
+        return candidate.toString();
+      }
+    }
+
+    final product = item['product'];
+
+    if (product is Map) {
+      final productMap = Map<String, dynamic>.from(product);
+
+      final name =
+          productMap['name'] ??
+          productMap['product_name'] ??
+          productMap['productName'];
+
+      if (name != null && name.toString().trim().isNotEmpty) {
+        return name.toString();
+      }
+    }
+
+    return 'Produk';
+  }
+
+  int _extractQuantity(Map<String, dynamic> item) {
+    final candidates = [
+      item['quantity'],
+      item['dropped_quantity'],
+      item['droppedQuantity'],
+    ];
+
+    for (final candidate in candidates) {
+      final quantity = _toInt(candidate);
+
+      if (quantity != null) {
+        return quantity;
+      }
+    }
+
+    return 0;
   }
 
   Future<Map<String, dynamic>> recordReturn(Map<String, dynamic> data) async {
@@ -203,5 +292,48 @@ class ReturnRepository {
     final clientId = await syncQueue.enqueue('return', data);
 
     return {'synced': false, 'client_id': clientId};
+  }
+
+  List<Map<String, dynamic>> _extractList(dynamic responseData) {
+    dynamic rawData = responseData;
+
+    if (responseData is Map) {
+      rawData = responseData['data'] ?? responseData;
+    }
+
+    if (rawData is! List) {
+      throw Exception('Format response list tidak valid.');
+    }
+
+    return rawData
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList();
+  }
+
+  Map<String, dynamic>? _extractMap(dynamic responseData) {
+    dynamic rawData = responseData;
+
+    if (responseData is Map) {
+      rawData = responseData['data'] ?? responseData;
+    }
+
+    if (rawData is! Map) {
+      return null;
+    }
+
+    return Map<String, dynamic>.from(rawData);
+  }
+
+  int? _toInt(dynamic value) {
+    if (value == null) {
+      return null;
+    }
+
+    if (value is int) {
+      return value;
+    }
+
+    return int.tryParse(value.toString());
   }
 }
