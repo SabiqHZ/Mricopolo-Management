@@ -35,31 +35,31 @@ export default function DashboardLayout({
       <nav className="w-56 bg-gray-900 text-white p-4 space-y-2">
         <p className="text-sm text-gray-400 mb-4">{user?.username}</p>
         <a href="/dashboard" className="block py-1">
-          Overview
+          Ringkasan
         </a>
         <a href="/dashboard/stores" className="block py-1">
-          Stores
+          Warung
         </a>
         <a href="/dashboard/products" className="block py-1">
-          Products
+          Produk
         </a>
         <a href="/dashboard/prices" className="block py-1">
-          Store Prices
+          Harga Warung
         </a>
         <a href="/dashboard/droppings" className="block py-1">
-          Droppings
+          Dropping
         </a>
         <a href="/dashboard/returns" className="block py-1">
-          Returns
+          Retur
         </a>
         <a href="/dashboard/invoices" className="block py-1">
-          Invoices
+          Faktur
         </a>
         <a href="/dashboard/direct-orders" className="block py-1">
-          Direct Orders
+          Pesanan Langsung
         </a>
         <a href="/dashboard/reports" className="block py-1">
-          Reports
+          Laporan
         </a>
         <button
           onClick={() => {

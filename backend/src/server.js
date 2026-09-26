@@ -6,8 +6,27 @@ const morgan = require("morgan");
 
 const app = express();
 
+// CORS: only the web dashboard's origin(s) may call this API from a browser.
+// Non-browser clients (Postman, the Flutter app) send no Origin header and
+// are unaffected by this either way. Set CORS_ORIGIN in .env as a
+// comma-separated list for multiple environments, e.g.
+// CORS_ORIGIN=http://localhost:3000,https://titipjual.example.com
+const allowedOrigins = (process.env.CORS_ORIGIN || "http://localhost:3000")
+  .split(",")
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+
 app.use(helmet());
-app.use(cors());
+app.use(
+  cors({
+    origin(origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error("Not allowed by CORS"));
+    },
+  }),
+);
 app.use(morgan("dev"));
 app.use(express.json());
 
@@ -46,6 +65,38 @@ app.get("/health", (req, res) => {
     success: true,
     data: { status: "ok" },
     message: "Server is running",
+  });
+});
+
+// 404 — no route matched. Must come after every app.use(route) above.
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    error: { code: "NOT_FOUND", message: "Route not found" },
+  });
+});
+
+// Global error handler — must be registered last, and must take exactly
+// 4 arguments for Express to recognize it as an error handler.
+// Express 5 auto-forwards rejected promises from async route handlers here,
+// so this is what guarantees every error (not just the ones each controller
+// explicitly catches) still returns the standard {success:false,error:{}}
+// envelope instead of Express's own default error page.
+app.use((err, req, res, next) => {
+  if (res.headersSent) return next(err);
+
+  console.error(err);
+
+  if (err && err.message === "Not allowed by CORS") {
+    return res.status(403).json({
+      success: false,
+      error: { code: "CORS_FORBIDDEN", message: "Origin not allowed" },
+    });
+  }
+
+  res.status(500).json({
+    success: false,
+    error: { code: "INTERNAL_ERROR", message: "An unexpected error occurred" },
   });
 });
 

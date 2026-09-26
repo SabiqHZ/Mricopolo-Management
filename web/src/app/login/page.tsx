@@ -25,7 +25,7 @@ export default function LoginPage() {
       await login(identifier, password);
       router.replace("/dashboard");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      setError(err instanceof Error ? err.message : "Gagal masuk");
     } finally {
       setSubmitting(false);
     }
@@ -39,17 +39,17 @@ export default function LoginPage() {
         onSubmit={handleSubmit}
         className="bg-white p-8 rounded-lg shadow-md w-full max-w-sm space-y-4"
       >
-        <h1 className="text-xl font-semibold">Titip Jual — Login</h1>
+        <h1 className="text-xl font-semibold">Titip Jual — Masuk</h1>
         <input
           className="w-full border rounded px-3 py-2"
-          placeholder="Username or Email"
+          placeholder="Username atau Email"
           value={identifier}
           onChange={(e) => setIdentifier(e.target.value)}
         />
         <input
           className="w-full border rounded px-3 py-2"
           type="password"
-          placeholder="Password"
+          placeholder="Kata sandi"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
         />
@@ -59,7 +59,7 @@ export default function LoginPage() {
           disabled={submitting}
           className="w-full bg-blue-600 text-white rounded px-3 py-2 disabled:opacity-50"
         >
-          {submitting ? "Logging in..." : "Login"}
+          {submitting ? "Sedang masuk..." : "Masuk"}
         </button>
       </form>
     </div>

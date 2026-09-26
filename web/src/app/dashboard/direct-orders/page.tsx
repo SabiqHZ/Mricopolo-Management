@@ -82,7 +82,7 @@ export default function DirectOrdersPage() {
       setOrders(await fetchOrders(token));
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Unable to load direct orders",
+        err instanceof Error ? err.message : "Gagal memuat pesanan langsung",
       );
     }
   };
@@ -105,7 +105,9 @@ export default function DirectOrdersPage() {
       } catch (err) {
         if (active)
           setError(
-            err instanceof Error ? err.message : "Unable to load direct orders",
+            err instanceof Error
+              ? err.message
+              : "Gagal memuat pesanan langsung",
           );
       } finally {
         if (active) setLoading(false);
@@ -131,7 +133,7 @@ export default function DirectOrdersPage() {
       setAmount("");
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Unable to load order detail",
+        err instanceof Error ? err.message : "Gagal memuat detail pesanan",
       );
     } finally {
       setDetailLoading(false);
@@ -187,9 +189,7 @@ export default function DirectOrdersPage() {
       setShowForm(false);
       await loadOrders();
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Unable to create direct order",
-      );
+      setError(err instanceof Error ? err.message : "Gagal menyimpan pesanan");
     } finally {
       setCreating(false);
     }
@@ -214,7 +214,9 @@ export default function DirectOrdersPage() {
       );
       await Promise.all([loadOrders(), showDetail(selected.id)]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to record payment");
+      setError(
+        err instanceof Error ? err.message : "Gagal mencatat pembayaran",
+      );
     } finally {
       setSubmittingPayment(false);
     }
@@ -232,7 +234,7 @@ export default function DirectOrdersPage() {
       );
       await Promise.all([loadOrders(), showDetail(selected.id)]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Unable to update status");
+      setError(err instanceof Error ? err.message : "Gagal memperbarui status");
     } finally {
       setUpdatingStatus(false);
     }
@@ -242,7 +244,7 @@ export default function DirectOrdersPage() {
     <section className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold">Direct orders</h1>
+          <h1 className="text-2xl font-semibold">Pesanan Langsung</h1>
           <p className="mt-1 text-sm text-gray-600">
             Catat pesanan langsung dari pelanggan perorangan, terpisah dari
             titip jual warung.
@@ -369,11 +371,11 @@ export default function DirectOrdersPage() {
         <table className="w-full text-left text-sm">
           <thead className="bg-gray-100 text-gray-700">
             <tr>
-              <th className="p-3">Order</th>
+              <th className="p-3">Pesanan</th>
               <th className="p-3">Pemesan</th>
               <th className="p-3">Ambil/kirim</th>
               <th className="p-3">Total</th>
-              <th className="p-3">Outstanding</th>
+              <th className="p-3">Sisa</th>
               <th className="p-3">Pembayaran</th>
               <th className="p-3">Status</th>
               <th className="p-3">Aksi</th>

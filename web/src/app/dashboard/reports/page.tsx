@@ -58,11 +58,9 @@ const formatCurrency = (amount: number) =>
     maximumFractionDigits: 0,
   }).format(amount);
 
-const formatNumber = (amount: number) =>
-  amount.toLocaleString("id-ID");
+const formatNumber = (amount: number) => amount.toLocaleString("id-ID");
 
-const toDateInputValue = (date: Date) =>
-  date.toISOString().slice(0, 10);
+const toDateInputValue = (date: Date) => date.toISOString().slice(0, 10);
 
 const startOfWeek = (date: Date) => {
   const result = new Date(date);
@@ -116,6 +114,13 @@ const getRangeForMode = (mode: PeriodMode): ReportRange => {
   return getInitialRange();
 };
 
+const MODE_LABEL: Record<PeriodMode, string> = {
+  daily: "Harian",
+  weekly: "Mingguan",
+  monthly: "Bulanan",
+  custom: "Kustom",
+};
+
 export default function ReportsPage() {
   const { token } = useAuth();
 
@@ -146,19 +151,15 @@ export default function ReportsPage() {
         limit: "10",
       });
 
-      const data = await apiFetch(
+      const data = (await apiFetch(
         `/reports?${params.toString()}`,
         {},
         token,
-      ) as ReportResponse;
+      )) as ReportResponse;
 
       setReport(data);
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Unable to load report",
-      );
+      setError(err instanceof Error ? err.message : "Gagal memuat laporan");
     } finally {
       setLoading(false);
     }
@@ -194,37 +195,30 @@ export default function ReportsPage() {
   return (
     <section className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">
-          Sales Reports
-        </h1>
+        <h1 className="text-2xl font-semibold">Laporan Penjualan</h1>
         <p className="mt-1 text-sm text-gray-600">
-          Combined reporting for consignment and direct orders.
+          Laporan gabungan untuk titip jual dan pesanan langsung.
         </p>
       </div>
 
       <div className="rounded-lg bg-white p-4 shadow-sm">
         <div className="flex flex-wrap gap-2">
-          {[
-            { value: "daily", label: "Daily" },
-            { value: "weekly", label: "Weekly" },
-            { value: "monthly", label: "Monthly" },
-            { value: "custom", label: "Custom" },
-          ].map((item) => (
-            <button
-              key={item.value}
-              type="button"
-              onClick={() =>
-                handleModeChange(item.value as PeriodMode)
-              }
-              className={`rounded px-4 py-2 text-sm ${
-                mode === item.value
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-100 text-gray-700"
-              }`}
-            >
-              {item.label}
-            </button>
-          ))}
+          {(["daily", "weekly", "monthly", "custom"] as PeriodMode[]).map(
+            (value) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => handleModeChange(value)}
+                className={`rounded px-4 py-2 text-sm ${
+                  mode === value
+                    ? "bg-blue-600 text-white"
+                    : "bg-gray-100 text-gray-700"
+                }`}
+              >
+                {MODE_LABEL[value]}
+              </button>
+            ),
+          )}
         </div>
 
         {mode === "custom" && (
@@ -233,7 +227,7 @@ export default function ReportsPage() {
             className="mt-4 flex flex-wrap items-end gap-3 border-t pt-4"
           >
             <label className="grid gap-1 text-sm">
-              From
+              Dari
               <input
                 className="rounded border px-3 py-2"
                 type="date"
@@ -249,7 +243,7 @@ export default function ReportsPage() {
             </label>
 
             <label className="grid gap-1 text-sm">
-              To
+              Sampai
               <input
                 className="rounded border px-3 py-2"
                 type="date"
@@ -269,93 +263,70 @@ export default function ReportsPage() {
               type="submit"
               disabled={loading}
             >
-              {loading ? "Loading..." : "Apply period"}
+              {loading ? "Memuat..." : "Terapkan periode"}
             </button>
           </form>
         )}
       </div>
 
       {error && (
-        <p
-          className="text-sm text-red-600"
-          role="alert"
-        >
+        <p className="text-sm text-red-600" role="alert">
           {error}
         </p>
       )}
 
       {loading && !report && (
         <div className="rounded-lg bg-white p-5 shadow-sm">
-          Loading report...
+          Memuat laporan...
         </div>
       )}
 
       {report && !error && (
         <>
           <div>
-            <p className="text-sm text-gray-500">
-              Reporting period
-            </p>
-            <p className="mt-1 font-medium">
-              {periodLabel}
-            </p>
+            <p className="text-sm text-gray-500">Periode laporan</p>
+            <p className="mt-1 font-medium">{periodLabel}</p>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <MetricCard
-              label="Total sold"
-              value={formatNumber(
-                report.summary.combined.sold_quantity,
-              )}
+              label="Total terjual"
+              value={formatNumber(report.summary.combined.sold_quantity)}
             />
 
             <MetricCard
-              label="Total returned"
-              value={formatNumber(
-                report.summary.consignment.returned_quantity,
-              )}
+              label="Total retur"
+              value={formatNumber(report.summary.consignment.returned_quantity)}
             />
 
             <MetricCard
-              label="Combined revenue"
-              value={formatCurrency(
-                report.summary.combined.revenue,
-              )}
+              label="Pendapatan gabungan"
+              value={formatCurrency(report.summary.combined.revenue)}
             />
 
             <MetricCard
-              label="Direct Order revenue"
-              value={formatCurrency(
-                report.summary.direct_order.revenue,
-              )}
+              label="Pendapatan pesanan langsung"
+              value={formatCurrency(report.summary.direct_order.revenue)}
             />
           </div>
 
           <section className="rounded-lg bg-white p-5 shadow-sm">
-            <h2 className="text-lg font-medium">
-              Revenue breakdown
-            </h2>
+            <h2 className="text-lg font-medium">Rincian pendapatan</h2>
 
             <div className="mt-4 grid gap-4 md:grid-cols-3">
               <BreakdownCard
-                label="Consignment"
-                value={formatCurrency(
-                  report.summary.consignment.revenue,
-                )}
+                label="Titip Jual"
+                value={formatCurrency(report.summary.consignment.revenue)}
               />
 
               <BreakdownCard
-                label="Direct Orders"
-                value={formatCurrency(
-                  report.summary.direct_order.revenue,
-                )}
+                label="Pesanan Langsung"
+                value={formatCurrency(report.summary.direct_order.revenue)}
               />
 
               <BreakdownCard
-                label="Combined"
-                value={formatCurrency(
-                  report.summary.combined.revenue,
-                )}
+                label="Gabungan"
+                value={formatCurrency(report.summary.combined.revenue)}
               />
             </div>
           </section>
@@ -363,11 +334,9 @@ export default function ReportsPage() {
           <div className="grid gap-6 xl:grid-cols-2">
             <section className="rounded-lg bg-white shadow-sm">
               <div className="border-b p-5">
-                <h2 className="text-lg font-medium">
-                  Top Products
-                </h2>
+                <h2 className="text-lg font-medium">Produk Terlaris</h2>
                 <p className="mt-1 text-sm text-gray-600">
-                  Ranked by quantity sold.
+                  Diurutkan berdasarkan jumlah terjual.
                 </p>
               </div>
 
@@ -375,39 +344,29 @@ export default function ReportsPage() {
                 <table className="w-full text-left text-sm">
                   <thead className="bg-gray-100 text-gray-700">
                     <tr>
-                      <th className="p-3">Rank</th>
-                      <th className="p-3">Product</th>
-                      <th className="p-3">Sold</th>
+                      <th className="p-3">Peringkat</th>
+                      <th className="p-3">Produk</th>
+                      <th className="p-3">Terjual</th>
                     </tr>
                   </thead>
 
                   <tbody>
                     {report.top_products.length === 0 && (
                       <tr>
-                        <td
-                          className="p-3 text-gray-500"
-                          colSpan={3}
-                        >
-                          No product sales in this period.
+                        <td className="p-3 text-gray-500" colSpan={3}>
+                          Tidak ada penjualan produk pada periode ini.
                         </td>
                       </tr>
                     )}
 
                     {report.top_products.map((product) => (
-                      <tr
-                        key={product.product_id}
-                        className="border-t"
-                      >
-                        <td className="p-3">
-                          {product.rank}
-                        </td>
+                      <tr key={product.product_id} className="border-t">
+                        <td className="p-3">{product.rank}</td>
                         <td className="p-3 font-medium">
                           {product.product_name}
                         </td>
                         <td className="p-3">
-                          {formatNumber(
-                            product.sold_quantity,
-                          )}
+                          {formatNumber(product.sold_quantity)}
                         </td>
                       </tr>
                     ))}
@@ -418,11 +377,9 @@ export default function ReportsPage() {
 
             <section className="rounded-lg bg-white shadow-sm">
               <div className="border-b p-5">
-                <h2 className="text-lg font-medium">
-                  Top Stores
-                </h2>
+                <h2 className="text-lg font-medium">Warung Terbaik</h2>
                 <p className="mt-1 text-sm text-gray-600">
-                  Ranked by consignment revenue.
+                  Diurutkan berdasarkan pendapatan titip jual.
                 </p>
               </div>
 
@@ -430,44 +387,30 @@ export default function ReportsPage() {
                 <table className="w-full text-left text-sm">
                   <thead className="bg-gray-100 text-gray-700">
                     <tr>
-                      <th className="p-3">Rank</th>
-                      <th className="p-3">Store</th>
-                      <th className="p-3">Sold</th>
-                      <th className="p-3">Revenue</th>
+                      <th className="p-3">Peringkat</th>
+                      <th className="p-3">Warung</th>
+                      <th className="p-3">Terjual</th>
+                      <th className="p-3">Pendapatan</th>
                     </tr>
                   </thead>
 
                   <tbody>
                     {report.top_stores.length === 0 && (
                       <tr>
-                        <td
-                          className="p-3 text-gray-500"
-                          colSpan={4}
-                        >
-                          No store sales in this period.
+                        <td className="p-3 text-gray-500" colSpan={4}>
+                          Tidak ada penjualan warung pada periode ini.
                         </td>
                       </tr>
                     )}
 
                     {report.top_stores.map((store) => (
-                      <tr
-                        key={store.store_id}
-                        className="border-t"
-                      >
+                      <tr key={store.store_id} className="border-t">
+                        <td className="p-3">{store.rank}</td>
+                        <td className="p-3 font-medium">{store.store_name}</td>
                         <td className="p-3">
-                          {store.rank}
+                          {formatNumber(store.sold_quantity)}
                         </td>
-                        <td className="p-3 font-medium">
-                          {store.store_name}
-                        </td>
-                        <td className="p-3">
-                          {formatNumber(
-                            store.sold_quantity,
-                          )}
-                        </td>
-                        <td className="p-3">
-                          {formatCurrency(store.revenue)}
-                        </td>
+                        <td className="p-3">{formatCurrency(store.revenue)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -481,13 +424,7 @@ export default function ReportsPage() {
   );
 }
 
-function MetricCard({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
+function MetricCard({ label, value }: { label: string; value: string }) {
   return (
     <article className="rounded-lg bg-white p-5 shadow-sm">
       <p className="text-sm text-gray-600">{label}</p>
@@ -496,19 +433,11 @@ function MetricCard({
   );
 }
 
-function BreakdownCard({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}) {
+function BreakdownCard({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-lg border p-4">
       <p className="text-sm text-gray-600">{label}</p>
-      <p className="mt-2 text-xl font-semibold">
-        {value}
-      </p>
+      <p className="mt-2 text-xl font-semibold">{value}</p>
     </div>
   );
 }

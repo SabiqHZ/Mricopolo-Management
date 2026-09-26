@@ -55,6 +55,22 @@ const list = (filters) => {
     params.push(filters.product_id);
   }
 
+  if (filters.q && String(filters.q).trim()) {
+    conditions.push(`(
+      EXISTS (
+        SELECT 1 FROM stores s_search
+        WHERE s_search.id = d.store_id AND s_search.name ILIKE $${idx}
+      )
+      OR EXISTS (
+        SELECT 1 FROM dropping_items di_search
+        JOIN products p_search ON p_search.id = di_search.product_id
+        WHERE di_search.dropping_id = d.id AND p_search.name ILIKE $${idx}
+      )
+    )`);
+    params.push(`%${String(filters.q).trim()}%`);
+    idx++;
+  }
+
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
   return pool.query(
